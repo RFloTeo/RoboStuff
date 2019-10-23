@@ -12,7 +12,7 @@ try:
       time.sleep(2.95)
       BP.set_motor_power(BP.PORT_A, 30)
       BP.set_motor_power(BP.PORT_B, -30)
-      time.sleep(1.455)
+      time.sleep(1.45)
       BP.reset_all()
       time.sleep(0.5)
 except KeyboardInterrupt:
