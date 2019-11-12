@@ -204,14 +204,13 @@ try:
 
     # realMotion.drawSquare()
 
-    realMotion.turnTowards(200, 700)
-    realMotion.turnTowards(100, 700)
-    realMotion.turnTowards(100, 500)
-    realMotion.turnTowards(200, 700)
+    # realMotion.turnTowards(300, 500)
+    # realMotion.turnTowards(300, 300)
+    # realMotion.turnTowards(200, 500)
     # realMotion.turnTowards(200, 600)
     # realMotion.turnTowards(100, 600)
 
-  #  realMotion.goToSquare()
+    realMotion.goToSquare()
 
 
 except KeyboardInterrupt:
