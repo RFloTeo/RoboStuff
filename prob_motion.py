@@ -22,7 +22,16 @@ class Particle:
         self.weight = weight
     
     def setPos(self, pos):
-        self.pos = pos
+        x = pos[0]
+        y = pos[1]
+        a = pos[2]
+        
+        if a > math.pi * 2:
+            a -=  math.pi * 2
+        if a < 0:
+            a +=  math.pi * 2
+        
+        self.pos = (x, y, a)
 
 
 class Canvas:
@@ -111,8 +120,10 @@ class TheoreticalMotion:
     
                 if distance > 0 and xIntersection >= min(Ax, Bx) and xIntersection <= max(Ax, Bx) and yIntersection >= min(Ay, By) and yIntersection <= max(Ay, By):
                     distances.append(distance)
-
-        return min(distances)
+        try:
+            return min(distances)
+        except ValueError:
+            return 1000
 
     def drawMove(self, x, y, a):
         line = (self.pos["x"], self.pos["y"], self.xMean, self.yMean)
@@ -128,7 +139,7 @@ class TheoreticalMotion:
         self.canvas.drawParticles(self.points)
 
     def updateParticles(self, x, y, a, reading):
-        newpoints = self.points
+        newpoints = self.points[:]
         if a != 0:
             for point in newpoints:
                 point.setPos((point.getPos()[0],
@@ -138,18 +149,32 @@ class TheoreticalMotion:
             for point in newpoints:
                 point.setPos((point.getPos()[0] + (x + random.gauss(self.mu[0], self.sigma[0])
                                      ) * math.cos(point.getPos()[2]),
-                    point.getPos()[1] - (y + random.gauss(self.mu[1], self.sigma[1])
+                    point.getPos()[1] + (y + random.gauss(self.mu[1], self.sigma[1])
                                      ) * math.sin(point.getPos()[2]),
                     point.getPos()[2] + random.gauss(self.mu[2], self.sigma[2])))
 
-        self.points = self.updateWeights(newpoints, reading)
 
+        self.canvas.drawParticles(self.points)
+        self.points = self.updateWeights(newpoints, reading)
+        
         self.xMean = sum(
-            list(map(lambda p: p.getPos()[0] * p.getWeight(), newpoints)))
+            list(map(lambda p: p.getPos()[0] , self.points))) / self.particleNum
         self.yMean = sum(
-            list(map(lambda p: p.getPos()[1] * p.getWeight(), newpoints)))
-        self.aMean = sum(
-            list(map(lambda p: p.getPos()[2] * p.getWeight(), newpoints)))
+            list(map(lambda p: p.getPos()[1] , self.points))) / self.particleNum
+
+        avgAngle = 0
+        for p in self.points:
+            angle = p.getPos()[2]
+            if angle > math.pi:
+                angle = angle - (math.pi * 2)
+            avgAngle += angle
+
+        avgAngle = avgAngle / self.particleNum
+
+        if avgAngle < 0:
+            avgAngle = (math.pi * 2) + avgAngle
+
+        self.aMean = avgAngle
         
 
     def updateWeights(self, points, reading):
@@ -158,8 +183,7 @@ class TheoreticalMotion:
         for point in points:
             pos = point.getPos()
             closestDistance = self.getClosestDistance(pos[0], pos[1], pos[2])
-            newWeight = scipy.stats.norm.pdf(reading, 1,
-                closestDistance) * point.getWeight()
+            newWeight = scipy.stats.norm.pdf(reading, 0.001, closestDistance) * point.getWeight()
             point.setWeight(newWeight)
             total += newWeight
 
@@ -167,8 +191,9 @@ class TheoreticalMotion:
             p.setWeight(p.getWeight() / total)
 
         for point in points:
-            numOfParticles = int(point.getWeight() * 1000)
-            # print("add: ", numOfParticles)
+            pos = point.getPos()
+            weight = point.getWeight()
+            numOfParticles = int(weight * 1000)
             genePool.extend([Particle(pos[0], pos[1], pos[2], 1/self.particleNum)
                              for i in range(numOfParticles)])
 
@@ -185,18 +210,17 @@ class TheoreticalMotion:
     def getRelativeAngle(self, x, y):
         ydiff = abs(y - self.yMean)
         angle = math.asin(ydiff/self.getDistance(x, y))
-
-        print("angle: ", angle)
-        if x >= self.xMean and y <= self.yMean:
+        
+        if x >= self.xMean and y >= self.yMean:
             return angle
 
-        if x >= self.xMean and y >= self.yMean:
+        if x >= self.xMean and y <= self.yMean:
             return (math.pi * 2) - angle
 
-        if x <= self.xMean and y <= self.yMean:
+        if x <= self.xMean and y >= self.yMean:
             return math.pi - angle
 
-        if x <= self.xMean and y >= self.yMean:
+        if x <= self.xMean and y <= self.yMean:
             return math.pi + angle
 
 
@@ -206,7 +230,7 @@ class RealMotion:
         self.move_dps = -100
         self.R = 360
         self.theoreticalMotion = TheoreticalMotion(
-            0, 0, 0, 0, 1.5, 1.5, 0.01, 0.04, x, y)
+            0, 0, 0, 0, 2, 2, 0.005, 0.005, x, y)
 
         self.BP = brickpi3.BrickPi333()
         self.BP.offset_motor_encoder(
@@ -227,24 +251,6 @@ class RealMotion:
         self.BP.set_motor_limits(self.BP.PORT_A, 30, 0.5 * self.R)
         self.BP.set_motor_limits(self.BP.PORT_B, 30, 0.5 * self.R)
 
-    # def turnLeft(self):
-    #     self.reset()
-    #     self.BP.set_motor_dps(self.BP.PORT_A, self.turn_dps)
-    #     self.BP.set_motor_dps(self.BP.PORT_B, -self.turn_dps)
-    #     time.sleep(1.40)
-    #     self.BP.reset_all()
-    #     self.theoreticalMotion.moveAndUpdate(0, 0, math.pi/2)
-
-    # def turnRight(self):
-    #     self.reset()
-    #     self.BP.set_motor_dps(self.BP.PORT_A, -self.turn_dps)
-    #     self.BP.set_motor_dps(self.BP.PORT_B, self.turn_dps)
-
-    #     time.sleep(1.40)
-
-    #     self.BP.reset_all()
-    #     self.theoreticalMotion.moveAndUpdate(0, 0, -math.pi/2)
-
     def turnDegrees(self, angle):
         if angle > math.pi:
             angle -= (math.pi * 2)
@@ -254,7 +260,7 @@ class RealMotion:
 
         duration = (1.38 * abs(angle) * 2) / math.pi
 
-        if angle < 0:
+        if angle > 0:
             self.reset()
             self.BP.set_motor_dps(self.BP.PORT_A, -self.turn_dps)
             self.BP.set_motor_dps(self.BP.PORT_B, self.turn_dps)
@@ -281,7 +287,7 @@ class RealMotion:
     def getReading(self):
         self.BP.set_sensor_type(
                 self.BP.PORT_2, self.BP.SENSOR_TYPE.NXT_ULTRASONIC)
-        time.sleep(1)
+        time.sleep(0.5)
         reading = []
         read = False
         while len(reading) < 10:
@@ -293,6 +299,23 @@ class RealMotion:
         reading.sort()
         print("I sensed: ", reading[5])
         return reading[5]
+
+    def nearby(self, x, y):
+        return abs(self.theoreticalMotion.xMean - x) < 2 and abs(self.theoreticalMotion.yMean - y) < 2
+
+    def localizedMove(self, x, y):
+        while not self.nearby(x,y): 
+            currentAngle = self.theoreticalMotion.aMean
+            targetAngle = self.theoreticalMotion.getRelativeAngle(x, y)
+            distance = self.theoreticalMotion.getDistance(x, y)
+            self.turnDegrees(currentAngle - targetAngle)
+
+            if distance < 20:
+                frac = (distance % 20) / 20
+                self.unitMove(frac)
+            else:
+                self.unitMove(1)
+
 
     def turnTowards(self, x, y):
         currentAngle = self.theoreticalMotion.aMean
@@ -311,6 +334,7 @@ class RealMotion:
         time.sleep(duration)
 
         self.BP.reset_all()
+
         reading = self.getReading()
 
         self.theoreticalMotion.moveAndUpdate(20 * frac, 20 * frac, 0, reading)
@@ -331,27 +355,42 @@ class RealMotion:
             self.turnLeft()
 
     def goToSquare(self):
-        realMotion.turnTowards(40, 0)
-        realMotion.turnTowards(40, 40)
-        realMotion.turnTowards(0, 40)
-        realMotion.turnTowards(0, 0)
-
-mymap = Map()
-realMotion = RealMotion(10, 80)
-
-try:
-    # realMotion.theoreticalMotion.getClosestDistance(10, 10,0.30100254230488177)
-    # realMotion.drawSquare()
-
-    realMotion.turnTowards(30, 80)
-    realMotion.turnTowards(30, 60)
-    # realMotion.turnTowards(300, 300)
-    # realMotion.turnTowards(200, 500)
-    # realMotion.turnTowards(200, 600)
-    # realMotion.turnTowards(100, 600)
-#
-    # realMotion.goToSquare()
+        self.realMotion.turnTowards(40, 0)
+        self.realMotion.turnTowards(40, 40)
+        self.realMotion.turnTowards(0, 40)
+        self.realMotion.turnTowards(0, 0)
 
 
-except KeyboardInterrupt:
-    realMotion.BP.reset_all()
+
+def moveToWaypoints():
+    mymap = Map()
+    realMotion = RealMotion(84, 30)
+    try:
+        realMotion.localizedMove(180, 30)
+        realMotion.localizedMove(180, 54)
+        realMotion.localizedMove(138, 54)
+        realMotion.localizedMove(138, 168)
+        realMotion.localizedMove(114, 168)
+        realMotion.localizedMove(114, 84)
+        realMotion.localizedMove(84, 84)
+        realMotion.localizedMove(84, 30)
+    except KeyboardInterrupt:
+        realMotion.BP.reset_all()
+
+def testing():
+    mymap = Map()
+    realMotion = RealMotion(68, 40)
+    try:
+
+        realMotion.localizedMove(118, 40)
+        realMotion.localizedMove(118, 20)
+    except KeyboardInterrupt:
+        realMotion.BP.reset_all()
+
+
+
+# testing()
+moveToWaypoints()
+
+
+
