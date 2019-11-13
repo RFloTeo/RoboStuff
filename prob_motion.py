@@ -1,7 +1,7 @@
 import random
 import math
 import time
-import brickpi3
+import brickpi333 as brickpi3
 import time
 import scipy
 import scipy.stats
@@ -20,6 +20,9 @@ class Particle:
 
     def setWeight(self, weight):
         self.weight = weight
+    
+    def setPos(self, pos):
+        self.pos = pos
 
 
 class Canvas:
@@ -91,14 +94,22 @@ class TheoreticalMotion:
 
     def getClosestDistance(self, x, y, a):
         walls = self.map.get_walls()
-        Ax = wall[0]
-        Ay = wall[1]
-        Bx = wall[2]
-        By = wall[3]
         distances = []
         for wall in walls:
-            distance.append(((By - Ay)*(Ax - x) - (Bx - Ax)*(Ay - y)) /
-                            ((Bt-Ay)*math.cos(a) - (Bx - Ax)*math.sin(a)))
+            Ax = wall[0]
+            Ay = wall[1]
+            Bx = wall[2]
+            By = wall[3]
+            if ((By-Ay)*math.cos(a) - (Bx - Ax)*math.sin(a)) !=0:
+
+                distance = (((By - Ay)*(Ax - x) - (Bx - Ax)*(Ay - y)) /
+                            ((By-Ay)*math.cos(a) - (Bx - Ax)*math.sin(a)))
+
+                xIntersection = round(x + distance * math.cos(a))
+                yIntersection = round(y + distance * math.sin(a))
+    
+                if distance > 0 and xIntersection >= min(Ax, Bx) and xIntersection <= max(Ax, Bx) and yIntersection >= min(Ay, By) and yIntersection <= max(Ay, By):
+                    distances.append(distance)
 
         return min(distances)
 
@@ -116,24 +127,22 @@ class TheoreticalMotion:
         self.updateParticles(x, y, a, reading)
         self.canvas.drawParticles(self.points)
 
+
     def updateParticles(self, x, y, a, reading):
         newpoints = self.points
         if a != 0:
-            newpoints = list(map(
-                lambda p: (
-                    p.getPos()[0],
-                    p.getPos()[1],
-                    p.getPos()[2] + a + random.gauss(self.mu[3], self.sigma[3])
-                ), newpoints))
+            for point in newpoints:
+                point.setPos((point.getPos()[0],
+                    point.getPos()[1],
+                    point.getPos()[2] + a + random.gauss(self.mu[3], self.sigma[3])))
         else:
-            newpoints = list(map(
-                lambda p: (
-                    p.getPos()[0] + (x + random.gauss(self.mu[0], self.sigma[0])
-                                     ) * math.cos(p.getPos()[2]),
-                    p.getPos()[1] - (y + random.gauss(self.mu[1], self.sigma[1])
-                                     ) * math.sin(p.getPos()[2]),
-                    p.getPos()[2] + random.gauss(self.mu[2], self.sigma[2])
-                ), newpoints))
+            for point in newpoints:
+                point.setPos((point.getPos()[0] + (x + random.gauss(self.mu[0], self.sigma[0])
+                                     ) * math.cos(point.getPos()[2]),
+                    point.getPos()[1] - (y + random.gauss(self.mu[1], self.sigma[1])
+                                     ) * math.sin(point.getPos()[2]),
+                    point.getPos()[2] + random.gauss(self.mu[2], self.sigma[2])))
+                
 
         self.points = self.updateWeights(newpoints, reading)
 
@@ -146,19 +155,27 @@ class TheoreticalMotion:
 
     def updateWeights(self, points, reading):
         genePool = []
+        total = 0
         for point in points:
             pos = point.getPos()
             closestDistance = self.getClosestDistance(pos[0], pos[1], pos[2])
-            point.setWeight(scipy.stats.norm(reading, 2).pdf(
-                closestDistance) * point.getWeight())
+            newWeight = scipy.stats.norm.pdf(reading, 2,
+                closestDistance) * point.getWeight()
+            point.setWeight(newWeight)
 
-        total = sum(list(map(lambda p: p.getWeight(), points)))
+            total += newWeight
 
-        map(lambda p: p.setWeight(p.getWeight() / total), points)
+        print("total ",total)
+
+        for p in points:
+            p.setWeight(p.getWeight() / total)
+
+        # map(lambda p: p.setWeight(p.getWeight() / total), points)
 
         for point in points:
-            numOfParticles = int(point.getWeight() * 100)
-            genePool.extend([Particle(pos[0], pos[1], pos[2], prob)
+            numOfParticles = int(point.getWeight() * 1000)
+            print("add: ", numOfParticles)
+            genePool.extend([Particle(pos[0], pos[1], pos[2], 1/self.particleNum)
                              for i in range(numOfParticles)])
 
         return [random.choice(genePool) for i in range(self.particleNum)]
@@ -196,7 +213,7 @@ class RealMotion:
         self.theoreticalMotion = TheoreticalMotion(
             0, 0, 0, 0, 1.5, 1.5, 0.01, 0.04, x, y)
 
-        self.BP = brickpi3.BrickPi3()
+        self.BP = brickpi3.BrickPi333()
         self.BP.offset_motor_encoder(
             self.BP.PORT_A, self.BP.get_motor_encoder(self.BP.PORT_A))
         self.BP.offset_motor_encoder(
@@ -318,11 +335,11 @@ class RealMotion:
         realMotion.turnTowards(0, 40)
         realMotion.turnTowards(0, 0)
 
-
-realMotion = RealMotion(0, 0)
 mymap = Map()
-try:
+realMotion = RealMotion(10, 10)
 
+try:
+    # realMotion.theoreticalMotion.getClosestDistance(10, 10,0.30100254230488177)
     # realMotion.drawSquare()
 
     # realMotion.turnTowards(300, 500)
@@ -330,7 +347,7 @@ try:
     # realMotion.turnTowards(200, 500)
     # realMotion.turnTowards(200, 600)
     # realMotion.turnTowards(100, 600)
-
+#
     realMotion.goToSquare()
 
 
