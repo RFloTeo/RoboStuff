@@ -78,6 +78,7 @@ class TheoreticalMotion:
         self.pos = {"x": x, "y": y, "theta": 0}
         self.xMean = x
         self.yMean = y
+        self.aMean = 0
         self.points = [Particle(self.pos["x"], self.pos["y"], 0, self.particleNum)
                        for i in range(self.particleNum)]
         self.map = Map()
@@ -114,19 +115,17 @@ class TheoreticalMotion:
         return min(distances)
 
     def drawMove(self, x, y, a):
-        line = (self.pos["x"], self.pos["y"], self.pos["x"] + x * math.cos(
-            self.pos["theta"]), self.pos["y"] - y * math.sin(self.pos["theta"]))
+        line = (self.pos["x"], self.pos["y"], self.xMean, self.yMean)
 
         self.canvas.drawLine(line)
 
-        self.pos["x"] += x * math.cos(self.pos["theta"])
-        self.pos["y"] -= y * math.sin(self.pos["theta"])
-        self.pos["theta"] = (self.pos["theta"] + a) % (math.pi * 2)
+        self.pos["x"] = self.xMean
+        self.pos["y"] = self.yMean
+        self.pos["theta"] = self.aMean
 
     def drawParticles(self, x, y, a, reading):
         self.updateParticles(x, y, a, reading)
         self.canvas.drawParticles(self.points)
-
 
     def updateParticles(self, x, y, a, reading):
         newpoints = self.points
@@ -142,7 +141,6 @@ class TheoreticalMotion:
                     point.getPos()[1] - (y + random.gauss(self.mu[1], self.sigma[1])
                                      ) * math.sin(point.getPos()[2]),
                     point.getPos()[2] + random.gauss(self.mu[2], self.sigma[2])))
-                
 
         self.points = self.updateWeights(newpoints, reading)
 
@@ -152,6 +150,7 @@ class TheoreticalMotion:
             list(map(lambda p: p.getPos()[1] * p.getWeight(), newpoints)))
         self.aMean = sum(
             list(map(lambda p: p.getPos()[2] * p.getWeight(), newpoints)))
+        
 
     def updateWeights(self, points, reading):
         genePool = []
@@ -159,30 +158,26 @@ class TheoreticalMotion:
         for point in points:
             pos = point.getPos()
             closestDistance = self.getClosestDistance(pos[0], pos[1], pos[2])
-            newWeight = scipy.stats.norm.pdf(reading, 2,
+            newWeight = scipy.stats.norm.pdf(reading, 1,
                 closestDistance) * point.getWeight()
             point.setWeight(newWeight)
-
             total += newWeight
-
-        print("total ",total)
 
         for p in points:
             p.setWeight(p.getWeight() / total)
 
-        # map(lambda p: p.setWeight(p.getWeight() / total), points)
-
         for point in points:
             numOfParticles = int(point.getWeight() * 1000)
-            print("add: ", numOfParticles)
+            # print("add: ", numOfParticles)
             genePool.extend([Particle(pos[0], pos[1], pos[2], 1/self.particleNum)
                              for i in range(numOfParticles)])
 
         return [random.choice(genePool) for i in range(self.particleNum)]
 
     def moveAndUpdate(self, x, y, a, reading):
-        self.drawMove(x, y, a)
         self.drawParticles(x, y, a, reading)
+        self.drawMove(x, y, a)
+        print("I think I am at: ", (self.xMean, self.yMean))
 
     def getDistance(self, x, y):
         return math.sqrt((x - self.xMean)**2 + (y - self.yMean)**2)
@@ -259,7 +254,7 @@ class RealMotion:
 
         duration = (1.38 * abs(angle) * 2) / math.pi
 
-        if angle > 0:
+        if angle < 0:
             self.reset()
             self.BP.set_motor_dps(self.BP.PORT_A, -self.turn_dps)
             self.BP.set_motor_dps(self.BP.PORT_B, self.turn_dps)
@@ -267,11 +262,8 @@ class RealMotion:
             time.sleep(duration)
 
             self.BP.reset_all()
-            self.BP.set_sensor_type(
-                self.BP.PORT_2, self.BP.SENSOR_TYPE.NXT_ULTRASONIC)
-            time.sleep(1)
-
-            reading = self.BP.get_sensor(self.BP.PORT_2)
+            
+            reading = self.getReading()
 
             self.theoreticalMotion.moveAndUpdate(0, 0, -angle, reading)
         else:
@@ -282,16 +274,28 @@ class RealMotion:
             time.sleep(duration)
 
             self.BP.reset_all()
-            self.BP.set_sensor_type(
-                self.BP.PORT_2, self.BP.SENSOR_TYPE.NXT_ULTRASONIC)
 
-            time.sleep(1)
-
-            reading = self.BP.get_sensor(self.BP.PORT_2)
+            reading = self.getReading()
             self.theoreticalMotion.moveAndUpdate(0, 0, -angle, reading)
 
+    def getReading(self):
+        self.BP.set_sensor_type(
+                self.BP.PORT_2, self.BP.SENSOR_TYPE.NXT_ULTRASONIC)
+        time.sleep(1)
+        reading = []
+        read = False
+        while len(reading) < 10:
+            try:
+                tryread = self.BP.get_sensor(self.BP.PORT_2)
+                reading.append(tryread)
+            except:
+                pass
+        reading.sort()
+        print("I sensed: ", reading[5])
+        return reading[5]
+
     def turnTowards(self, x, y):
-        currentAngle = self.theoreticalMotion.pos["theta"]
+        currentAngle = self.theoreticalMotion.aMean
         targetAngle = self.theoreticalMotion.getRelativeAngle(x, y)
         distance = self.theoreticalMotion.getDistance(x, y)
 
@@ -299,7 +303,7 @@ class RealMotion:
         self.move(distance)
 
     def unitMove(self, frac):
-        duration = 1.653 * frac
+        duration = (1.653 * 2) * frac
         self.reset()
         self.BP.set_motor_dps(self.BP.PORT_A, self.move_dps)
         self.BP.set_motor_dps(self.BP.PORT_B, self.move_dps)
@@ -307,16 +311,13 @@ class RealMotion:
         time.sleep(duration)
 
         self.BP.reset_all()
-        self.BP.set_sensor_type(
-            self.BP.PORT_2, self.BP.SENSOR_TYPE.NXT_ULTRASONIC)
-        time.sleep(1)
-        reading = self.BP.get_sensor(self.BP.PORT_2)
+        reading = self.getReading()
 
-        self.theoreticalMotion.moveAndUpdate(10 * frac, 10 * frac, 0, reading)
+        self.theoreticalMotion.moveAndUpdate(20 * frac, 20 * frac, 0, reading)
 
     def move(self, dist):
-        frac = (dist % 10) / 10
-        count = int(dist / 10)
+        frac = (dist % 20) / 20
+        count = int(dist / 20)
 
         for i in range(count):
             self.unitMove(1)
@@ -336,19 +337,20 @@ class RealMotion:
         realMotion.turnTowards(0, 0)
 
 mymap = Map()
-realMotion = RealMotion(10, 10)
+realMotion = RealMotion(10, 80)
 
 try:
     # realMotion.theoreticalMotion.getClosestDistance(10, 10,0.30100254230488177)
     # realMotion.drawSquare()
 
-    # realMotion.turnTowards(300, 500)
+    realMotion.turnTowards(30, 80)
+    realMotion.turnTowards(30, 60)
     # realMotion.turnTowards(300, 300)
     # realMotion.turnTowards(200, 500)
     # realMotion.turnTowards(200, 600)
     # realMotion.turnTowards(100, 600)
 #
-    realMotion.goToSquare()
+    # realMotion.goToSquare()
 
 
 except KeyboardInterrupt:
