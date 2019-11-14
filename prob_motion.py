@@ -156,7 +156,7 @@ class TheoreticalMotion:
 
 
         self.canvas.drawParticles(newpoints)
-        time.sleep(1)
+        time.sleep(0.2)
         self.points = self.updateWeightsWithGenepool(newpoints, reading)
         
         self.xMean = sum(
@@ -194,7 +194,7 @@ class TheoreticalMotion:
             pos = point.getPos()
             closestDistance = self.getClosestDistance(pos[0], pos[1], pos[2])
             # newWeight =  math.exp(((-(closestDistance - reading)**2) / (2 * (sigma ** 2) )))
-            if abs(closestDistance - reading) < 20:
+            if abs(closestDistance - reading) < 15:
                 newWeight = scipy.stats.norm.pdf(reading, sigma, closestDistance)
                 point.setWeight(newWeight)
                 total += newWeight
@@ -205,41 +205,40 @@ class TheoreticalMotion:
         for p in points:
             p.setWeight(p.getWeight() / total)
 
-        # newParticles = []
-        # for i in range(self.particleNum):
-        #     newParticleCDF = random.uniform(0, 1)
-        #     cdf = 0
-        #     for p in points:
-        #         pos = p.getPos
-        #         cdf += p.getWeight()
-        #         if cdf >= newParticleCDF:
-        #             newparticle = Particle(pos[0], pos[1], pos[2], self.particleNum)
-        #             newParticles.append(newParticles)
-        #             break
-
-        # return newParticles
-
-        for point in points:
-            pos = point.getPos()
-            weight = point.getWeight()
-            numOfParticles = int(weight * 10000)
-            for i in range(numOfParticles):
-                particle = Particle(pos[0], pos[1], pos[2], self.particleNum)
-                genePool.append(particle)
-            # genePool.extend([Particle(pos[0], pos[1], pos[2], self.particleNum)
-            #                  for i in range(numOfParticles)])
-
         newParticles = []
         for i in range(self.particleNum):
-            newParticles.append(random.choice(genePool))
+            newParticleCDF = random.uniform(0, 1)
+            cdf = 0
+            for p in points:
+                pos = p.getPos()
+                cdf += p.getWeight()
+                if cdf >= newParticleCDF:
+                    newParticle = Particle(pos[0], pos[1], pos[2], self.particleNum)
+                    newParticles.append(newParticle)
+                    break
 
         return newParticles
+
+        # for point in points:
+        #     pos = point.getPos()
+        #     weight = point.getWeight()
+        #     numOfParticles = int(weight * 10000)
+        #     for i in range(numOfParticles):
+        #         particle = Particle(pos[0], pos[1], pos[2], self.particleNum)
+        #         genePool.append(particle)
+        #     # genePool.extend([Particle(pos[0], pos[1], pos[2], self.particleNum)
+        #     #                  for i in range(numOfParticles)])
+
+        # newParticles = []
+        # for i in range(self.particleNum):
+        #     newParticles.append(random.choice(genePool))
+
+        # return newParticles
         # return [random.choice(genePool) for i in range(self.particleNum)]
 
     def moveAndUpdate(self, x, y, a, reading):
         self.drawParticles(x, y, a, reading)
         self.drawMove(x, y, a)
-        print("I think I am at: ", (self.xMean, self.yMean))
 
     def getDistance(self, x, y):
         return math.sqrt((x - self.xMean)**2 + (y - self.yMean)**2)
@@ -335,18 +334,23 @@ class RealMotion:
             except:
                 pass
         mean = sum(reading) / len(reading)
+        print(reading)
         print("I sensed: ", mean)
         return mean
 
     def nearby(self, x, y):
-        return abs(self.theoreticalMotion.xMean - x) < 5 and abs(self.theoreticalMotion.yMean - y) < 5
+        return abs(self.theoreticalMotion.xMean - x) < 4.5 and abs(self.theoreticalMotion.yMean - y) < 4.5
 
     def localizedMove(self, x, y):
+        print("checkpoint reached")
         while not self.nearby(x,y): 
             currentAngle = self.theoreticalMotion.aMean
             targetAngle = self.theoreticalMotion.getRelativeAngle(x, y)
             distance = self.theoreticalMotion.getDistance(x, y)
             self.turnDegrees(currentAngle - targetAngle)
+
+            print("I think I am at: ", (self.theoreticalMotion.xMean, self.theoreticalMotion.yMean))
+            print("I plan to go to: ", (x, y))
 
             if distance < 20:
                 frac = distance / 20
