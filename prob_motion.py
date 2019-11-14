@@ -4,6 +4,7 @@ import time
 import brickpi333 as brickpi3
 import time
 import scipy
+import random
 import scipy.stats
 
 
@@ -154,8 +155,9 @@ class TheoreticalMotion:
                     point.getPos()[2] + random.gauss(self.mu[2], self.sigma[2])))
 
 
-        self.canvas.drawParticles(self.points)
-        self.points = self.updateWeights(newpoints, reading)
+        self.canvas.drawParticles(newpoints)
+        time.sleep(1)
+        self.points = self.updateWeightsWithGenepool(newpoints, reading)
         
         self.xMean = sum(
             list(map(lambda p: p.getPos()[0] , self.points))) / self.particleNum
@@ -176,28 +178,63 @@ class TheoreticalMotion:
 
         self.aMean = avgAngle
         
+    def updateWeightsWithLikelihood(self, points, reading):
+        for point in points:
+            pos = point.getPos()
+            sigma = 2
+            closestDistance = self.getClosestDistance(pos[0], pos[1], pos[2])
+            newWeight = math.e ** ((-(closestDistance - reading)**2) / (2 * (sigma ** 2) ))
+        
 
-    def updateWeights(self, points, reading):
+    def updateWeightsWithGenepool(self, points, reading):
         genePool = []
         total = 0
+        sigma = 2
         for point in points:
             pos = point.getPos()
             closestDistance = self.getClosestDistance(pos[0], pos[1], pos[2])
-            newWeight = scipy.stats.norm.pdf(reading, 0.001, closestDistance) * point.getWeight()
-            point.setWeight(newWeight)
-            total += newWeight
+            # newWeight =  math.exp(((-(closestDistance - reading)**2) / (2 * (sigma ** 2) )))
+            if abs(closestDistance - reading) < 20:
+                newWeight = scipy.stats.norm.pdf(reading, sigma, closestDistance)
+                point.setWeight(newWeight)
+                total += newWeight
+            else:
+                total += point.getWeight()
+            
 
         for p in points:
             p.setWeight(p.getWeight() / total)
 
+        # newParticles = []
+        # for i in range(self.particleNum):
+        #     newParticleCDF = random.uniform(0, 1)
+        #     cdf = 0
+        #     for p in points:
+        #         pos = p.getPos
+        #         cdf += p.getWeight()
+        #         if cdf >= newParticleCDF:
+        #             newparticle = Particle(pos[0], pos[1], pos[2], self.particleNum)
+        #             newParticles.append(newParticles)
+        #             break
+
+        # return newParticles
+
         for point in points:
             pos = point.getPos()
             weight = point.getWeight()
-            numOfParticles = int(weight * 1000)
-            genePool.extend([Particle(pos[0], pos[1], pos[2], 1/self.particleNum)
-                             for i in range(numOfParticles)])
+            numOfParticles = int(weight * 10000)
+            for i in range(numOfParticles):
+                particle = Particle(pos[0], pos[1], pos[2], self.particleNum)
+                genePool.append(particle)
+            # genePool.extend([Particle(pos[0], pos[1], pos[2], self.particleNum)
+            #                  for i in range(numOfParticles)])
 
-        return [random.choice(genePool) for i in range(self.particleNum)]
+        newParticles = []
+        for i in range(self.particleNum):
+            newParticles.append(random.choice(genePool))
+
+        return newParticles
+        # return [random.choice(genePool) for i in range(self.particleNum)]
 
     def moveAndUpdate(self, x, y, a, reading):
         self.drawParticles(x, y, a, reading)
@@ -230,7 +267,7 @@ class RealMotion:
         self.move_dps = -100
         self.R = 360
         self.theoreticalMotion = TheoreticalMotion(
-            0, 0, 0, 0, 2, 2, 0.005, 0.005, x, y)
+            0, 0, 0, 0, 0.1, 0.1, 0.01, 0.01, x, y)
 
         self.BP = brickpi3.BrickPi333()
         self.BP.offset_motor_encoder(
@@ -290,18 +327,19 @@ class RealMotion:
         time.sleep(0.5)
         reading = []
         read = False
-        while len(reading) < 10:
+        while len(reading) < 50:
             try:
                 tryread = self.BP.get_sensor(self.BP.PORT_2)
-                reading.append(tryread)
+                if tryread != 255:
+                    reading.append(tryread)
             except:
                 pass
-        reading.sort()
-        print("I sensed: ", reading[5])
-        return reading[5]
+        mean = sum(reading) / len(reading)
+        print("I sensed: ", mean)
+        return mean
 
     def nearby(self, x, y):
-        return abs(self.theoreticalMotion.xMean - x) < 2 and abs(self.theoreticalMotion.yMean - y) < 2
+        return abs(self.theoreticalMotion.xMean - x) < 5 and abs(self.theoreticalMotion.yMean - y) < 5
 
     def localizedMove(self, x, y):
         while not self.nearby(x,y): 
@@ -311,7 +349,7 @@ class RealMotion:
             self.turnDegrees(currentAngle - targetAngle)
 
             if distance < 20:
-                frac = (distance % 20) / 20
+                frac = distance / 20
                 self.unitMove(frac)
             else:
                 self.unitMove(1)
