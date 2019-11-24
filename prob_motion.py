@@ -84,7 +84,7 @@ class TheoreticalMotion:
     def __init__(self, x_mean, y_mean, straight_angle_mean, rotation_angle_mean, x_sd, y_sd, straight_angle_sd, rotation_angle_sd, x, y):
         self.mu = (x_mean,  y_mean, straight_angle_mean, rotation_angle_mean)
         self.sigma = (x_sd,  y_sd, straight_angle_sd, rotation_angle_sd)
-        self.particleNum = 100
+        self.particleNum = 20
         self.pos = {"x": x, "y": y, "theta": 0}
         self.xMean = x
         self.yMean = y
@@ -102,6 +102,19 @@ class TheoreticalMotion:
         self.map.add_wall((210, 84, 210, 0))     # g
         self.map.add_wall((210, 0, 0, 0))        # h
         self.map.draw()
+
+    def addObstacle(self, angle, distance):
+        s = math.sin(angle)
+        c = math.cos(angle)
+        centerX = self.xMean + distance * s
+        centerY = self.yMean + distance * c 
+        Ax = centerX - s * 5
+        Ay = centerY + c * 5
+        Bx = centerX + s * 5
+        By = centerY - c * 5
+        self.map.add_wall((Ax,Ay,Bx,By))
+        self.map.draw()
+
 
     def getClosestDistance(self, x, y, a):
         walls = self.map.get_walls()
@@ -131,7 +144,7 @@ class TheoreticalMotion:
                 if distance[0] < minDistance[0]:
                     minDistance = distance
 
-            print("Facing Wall", minDistance[2])
+            # print("Facing Wall", minDistance[2])
             return minDistance
         except ValueError:
             return (1000, 1, -1)
@@ -147,7 +160,7 @@ class TheoreticalMotion:
 
     def drawParticles(self, x, y, a, reading):
         self.updateParticles(x, y, a, reading)
-        self.canvas.drawParticles(self.points)
+        # self.canvas.drawParticles(self.points)
 
     def updateParticles(self, x, y, a, reading):
         newpoints = self.points[:]
@@ -164,8 +177,6 @@ class TheoreticalMotion:
                                                    ) * math.sin(point.getPos()[2]),
                               point.getPos()[2] + random.gauss(self.mu[2], self.sigma[2])))
 
-        self.canvas.drawParticles(newpoints)
-        time.sleep(0.2)
         self.points = self.updateWeights(newpoints, reading)
 
         self.xMean = sum(
@@ -188,7 +199,6 @@ class TheoreticalMotion:
         self.aMean = avgAngle
 
     def updateWeights(self, points, reading):
-        genePool = []
         total = 0
         sigma = 2
         for point in points:
@@ -202,7 +212,6 @@ class TheoreticalMotion:
                 total += newWeight
             else:
                 total += point.getWeight()
-
         for p in points:
             p.setWeight(p.getWeight() / total)
 
@@ -264,8 +273,8 @@ class RealMotion:
             self.BP.PORT_A, self.BP.get_motor_encoder(self.BP.PORT_A))
         self.BP.offset_motor_encoder(
             self.BP.PORT_B, self.BP.get_motor_encoder(self.BP.PORT_B))
-        self.BP.set_sensor_type(self.BP.PORT_3, self.BP.SENSOR_TYPE.CUSTOM, [
-                                (self.BP.SENSOR_CUSTOM.PIN1_ADC)])
+        self.BP.set_sensor_type(self.BP.PORT_3, self.BP.SENSOR_TYPE.TOUCH)
+        self.BP.set_sensor_type(self.BP.PORT_4, self.BP.SENSOR_TYPE.TOUCH)
 
         self.BP.set_motor_limits(self.BP.PORT_A, 30, 0.5 * self.R)
         self.BP.set_motor_limits(self.BP.PORT_B, 30, 0.5 * self.R)
@@ -276,8 +285,8 @@ class RealMotion:
             self.BP.PORT_A, self.BP.get_motor_encoder(self.BP.PORT_A))
         self.BP.offset_motor_encoder(
             self.BP.PORT_B, self.BP.get_motor_encoder(self.BP.PORT_B))
-        self.BP.set_sensor_type(self.BP.PORT_3, self.BP.SENSOR_TYPE.CUSTOM, [
-                                (self.BP.SENSOR_CUSTOM.PIN1_ADC)])
+        self.BP.set_sensor_type(self.BP.PORT_3, self.BP.SENSOR_TYPE.TOUCH)
+        self.BP.set_sensor_type(self.BP.PORT_4, self.BP.SENSOR_TYPE.TOUCH)
 
         self.BP.set_motor_limits(self.BP.PORT_A, 30, 0.5 * self.R)
         self.BP.set_motor_limits(self.BP.PORT_B, 30, 0.5 * self.R)
@@ -318,9 +327,7 @@ class RealMotion:
     def getReading(self):
         self.BP.set_sensor_type(
             self.BP.PORT_2, self.BP.SENSOR_TYPE.NXT_ULTRASONIC)
-        time.sleep(0.5)
         reading = []
-        read = False
         while len(reading) < 5:
             try:
                 tryread = self.BP.get_sensor(self.BP.PORT_2)
@@ -343,7 +350,9 @@ class RealMotion:
 
     def findBottle(self, Ax, Ay, Bx, By):
         self.scanArea(Ax, Ay, Bx, By)
-        self.sensingUnitMove()
+        self.unitMoveWithSenseStop()
+        self.backwardsUnitMove(0.5)
+        print("Position after bottle" + str(self.theoreticalMotion.pos))
 
     # Assuming angle to (Ax, Ay) is > angle to (Bx, By)
     def scanArea(self, Ax, Ay, Bx, By):
@@ -366,18 +375,20 @@ class RealMotion:
             reading = self.getReading()
             expectedReading = self.theoreticalMotion.getClosestDistance(
                 self.theoreticalMotion.xMean, self.theoreticalMotion.yMean, self.theoreticalMotion.aMean)
-
+            
             print("reading: ", reading, " minmax: ",
                   (expectedReading[0] - 20 * expectedReading[1], expectedReading[0] + 20 * expectedReading[1]))
             if reading < expectedReading[0] - 20 * expectedReading[1] or reading > expectedReading[0] + 20 * expectedReading[1]:
                 realMotion.turnDegrees(deg)
-                # calculate pos again
+                # add wall
+                angle = self.theoreticalMotion.aMean
+                distance = reading
+                self.theoreticalMotion.addObstacle(angle, distance)
                 return
 
         print("ERROR: no bottle")
 
     def localizedMove(self, x, y):
-        print("checkpoint reached")
         while not self.nearby(x, y):
             distance = self.theoreticalMotion.getDistance(x, y)
             self.lookTowards(x, y)
@@ -401,23 +412,77 @@ class RealMotion:
         time.sleep(duration)
 
         self.BP.reset_all()
+        self.reset()
 
         reading = self.getReading()
         self.theoreticalMotion.moveAndUpdate(20 * frac, 20 * frac, 0, reading)
 
-    def sensingUnitMove(self):
-        twocm = 1.65 / 20
+    def readTouch(self):
+        read = False
+        while not read:
+            try:
+                value_touch_1 = self.BP.get_sensor(self.BP.PORT_3)
+                value_touch_2 = self.BP.get_sensor(self.BP.PORT_4)
+                read = True
+            except:
+                pass
+        
+        return value_touch_1 == 1 or value_touch_2 == 1
+
+    def unitMoveWithSenseStop(self):
+        duration = 1.65 # 1.65seconds for 20cm
         self.reset()
         self.BP.set_motor_dps(self.BP.PORT_A, self.move_dps)
         self.BP.set_motor_dps(self.BP.PORT_B, self.move_dps)
 
-        while True:
-            time.sleep(twocm)
-            value = self.BP.get_sensor(self.BP.PORT_3)[0]
-            # print("value: ", value)
-            if value < 4000:
-                self.BP.reset_all()
-                break
+        start = time.time()
+        while time.time() - start < duration and not self.readTouch():
+            pass
+        actual_time = time.time() - start
+
+        self.BP.reset_all()
+        self.reset()
+        actual_duration = actual_time / duration
+        actual_distance = actual_duration * 20
+
+        reading = self.getReading()
+        self.theoreticalMotion.moveAndUpdate(actual_distance, actual_distance, 0, reading)
+
+    def backwardsUnitMove(self, frac):
+        duration = 1.65 * frac
+        self.reset()
+        self.BP.set_motor_dps(self.BP.PORT_A, -self.move_dps)
+        self.BP.set_motor_dps(self.BP.PORT_B, -self.move_dps)
+
+        time.sleep(duration)
+
+        self.BP.reset_all()
+        self.reset()
+
+        reading = self.getReading()
+        self.theoreticalMotion.moveAndUpdate(-20 * frac, -20 * frac, 0, reading)
+
+    # def sensingUnitMove(self):
+    #     two_cm = (1/10)
+    #     self.unitMove(two_cm)
+
+    #     while True:
+    #         self.reset()
+    #         read = False
+    #         while not read:
+    #             try:
+    #                 value_touch_1 = self.BP.get_sensor(self.BP.PORT_3)
+    #                 value_touch_2 = self.BP.get_sensor(self.BP.PORT_4)
+    #                 read = True
+    #             except:
+    #                 pass
+
+    #         if value_touch_1 == 1 or value_touch_2 == 1:
+    #             self.BP.reset_all()
+    #             self.reset()
+    #             break
+    #         else:
+    #             self.unitMove(two_cm)
 
 
 def moveToWaypoints():
@@ -434,18 +499,6 @@ def moveToWaypoints():
     except KeyboardInterrupt:
         realMotion.BP.reset_all()
 
-
-def testing():
-    realMotion = RealMotion(68, 40)
-    try:
-
-        realMotion.localizedMove(118, 40)
-        realMotion.localizedMove(118, 20)
-    except KeyboardInterrupt:
-        realMotion.BP.reset_all()
-
-
-# testing()
 # moveToWaypoints()
 realMotion = RealMotion(84, 30)
 realMotion.localizedMove(104, 30)
