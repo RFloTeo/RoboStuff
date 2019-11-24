@@ -331,13 +331,24 @@ class RealMotion:
         self.BP.set_sensor_type(
             self.BP.PORT_2, self.BP.SENSOR_TYPE.NXT_ULTRASONIC)
         reading = []
+        estimatedReading = self.theoreticalMotion.getClosestDistance(self.theoreticalMotion.xMean, self.theoreticalMotion.yMean, self.theoreticalMotion.aMean)[0]
+        bad = False
         while len(reading) < 5:
             try:
                 tryread = self.BP.get_sensor(self.BP.PORT_2)
                 if tryread != 255:
                     reading.append(tryread)
+                    bad = False
+                else:
+                    time.sleep(0.2)
+                    if not bad :
+                        print("I got many 255")
+                        bad = True
             except:
-                pass
+                time.sleep(0.2)
+                print("I got bad sensor readdings")
+                # TODO: THINK ABOUT IF THIS IS OKAY (ASSUME ESTIMATE READING)
+                reading.append(estimatedReading)
         mean = sum(reading) / len(reading)
         print(reading)
         print("I sensed: ", mean)
@@ -352,14 +363,18 @@ class RealMotion:
         self.turnDegrees(currentAngle - targetAngle)
 
     def findBottle(self, Ax, Ay, Bx, By):
+        original_angle = self.theoreticalMotion.aMean
         found = self.scanArea(Ax, Ay, Bx, By)
         if found:
             self.unitMoveWithSenseStop()
-            self.backwardsUnitMove(0.7)
+            self.backwardsUnitMove(1)
             print("Position after bottle" + str(self.theoreticalMotion.pos))
         else:
-            unitMove(0.5)
-            findBottle(Ax, Ay, Bx, By)
+            current_angle = self.theoreticalMotion.aMean
+            self.turnDegrees(current_angle - original_angle)
+            self.unitMove(1)
+            self.findBottle(Ax, Ay, Bx, By)
+            
 
     # Assuming angle to (Ax, Ay) is > angle to (Bx, By)
     def scanArea(self, Ax, Ay, Bx, By):
@@ -383,10 +398,11 @@ class RealMotion:
             expectedReading = self.theoreticalMotion.getClosestDistance(
                 self.theoreticalMotion.xMean, self.theoreticalMotion.yMean, self.theoreticalMotion.aMean)
             
-            print("reading: ", reading, " minmax: ",
-                  (expectedReading[0] - 20 * expectedReading[1], expectedReading[0] + 20 * expectedReading[1]))
-            if reading < expectedReading[0] - 20 * expectedReading[1] or reading > expectedReading[0] + 20 * expectedReading[1]:
-                realMotion.turnDegrees(deg)
+            print("reading: ", reading, "check less than: ",expectedReading[0] - 20 * expectedReading[1])
+            if reading < expectedReading[0] - 20 * expectedReading[1]:
+                # normalize turn after found
+                self.turnDegrees( (65/reading) * deg)
+                
                 # add wall
                 angle = self.theoreticalMotion.aMean
                 distance = reading
@@ -394,6 +410,7 @@ class RealMotion:
                 return True
 
         print("ERROR: no bottle")
+
         return False
 
     def localizedMove(self, x, y):
@@ -447,7 +464,7 @@ class RealMotion:
 
         start = time.time()
         while not self.readTouch():
-            time.sleep(0.2)
+            time.sleep(0.1)
             pass
         actual_time = time.time() - start
 
@@ -473,28 +490,6 @@ class RealMotion:
         reading = self.getReading()
         self.theoreticalMotion.moveAndUpdate(-20 * frac, -20 * frac, 0, reading)
 
-    # def sensingUnitMove(self):
-    #     two_cm = (1/10)
-    #     self.unitMove(two_cm)
-
-    #     while True:
-    #         self.reset()
-    #         read = False
-    #         while not read:
-    #             try:
-    #                 value_touch_1 = self.BP.get_sensor(self.BP.PORT_3)
-    #                 value_touch_2 = self.BP.get_sensor(self.BP.PORT_4)
-    #                 read = True
-    #             except:
-    #                 pass
-
-    #         if value_touch_1 == 1 or value_touch_2 == 1:
-    #             self.BP.reset_all()
-    #             self.reset()
-    #             break
-    #         else:
-    #             self.unitMove(two_cm)
-
 
 def moveToWaypoints():
     realMotion = RealMotion(84, 30)
@@ -510,9 +505,19 @@ def moveToWaypoints():
     except KeyboardInterrupt:
         realMotion.BP.reset_all()
 
-# moveToWaypoints()
+
 realMotion = RealMotion(84, 30)
+
+# Bottle 1
 realMotion.localizedMove(104, 30)
 realMotion.findBottle(168, 0, 168, 84)
-# realMotion.localizedMove(20, 0)
-# realMotion.sensingUnitMove()
+
+# Bottle 2
+realMotion.localizedMove(126, 57)
+realMotion.findBottle(84, 126, 168, 84)
+
+# Bottle 3
+realMotion.localizedMove(84, 30)
+realMotion.localizedMove(70, 40)
+realMotion.findBottle(0, 30, 84, 126)
+
