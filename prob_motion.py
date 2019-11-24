@@ -84,7 +84,7 @@ class TheoreticalMotion:
     def __init__(self, x_mean, y_mean, straight_angle_mean, rotation_angle_mean, x_sd, y_sd, straight_angle_sd, rotation_angle_sd, x, y):
         self.mu = (x_mean,  y_mean, straight_angle_mean, rotation_angle_mean)
         self.sigma = (x_sd,  y_sd, straight_angle_sd, rotation_angle_sd)
-        self.particleNum = 20
+        self.particleNum = 50
         self.pos = {"x": x, "y": y, "theta": 0}
         self.xMean = x
         self.yMean = y
@@ -104,14 +104,15 @@ class TheoreticalMotion:
         self.map.draw()
 
     def addObstacle(self, angle, distance):
+        print("currnet angle before drawing wall: ", (angle / math.pi) * 180)
         s = math.sin(angle)
         c = math.cos(angle)
-        centerX = self.xMean + distance * s
-        centerY = self.yMean + distance * c 
-        Ax = centerX - s * 5
-        Ay = centerY + c * 5
-        Bx = centerX + s * 5
-        By = centerY - c * 5
+        centerX = self.xMean + distance * c
+        centerY = self.yMean + distance * s 
+        Ax = centerX - s * 8
+        Ay = centerY + c * 8
+        Bx = centerX + s * 8
+        By = centerY - c * 8
         self.map.add_wall((Ax,Ay,Bx,By))
         self.map.draw()
 
@@ -132,13 +133,15 @@ class TheoreticalMotion:
                 xIntersection = round(x + distance * math.cos(a))
                 yIntersection = round(y + distance * math.sin(a))
 
-                if distance > 0 and xIntersection >= min(Ax, Bx) and xIntersection <= max(Ax, Bx) and yIntersection >= min(Ay, By) and yIntersection <= max(Ay, By):
-
-                    if self.getNormalAngle(Ax, Ay, Bx, By) > math.pi / 3:
+                if distance >  0 and xIntersection >= min(Ax, Bx) and xIntersection <= max(Ax, Bx) and yIntersection >= min(Ay, By) and yIntersection <= max(Ay, By):
+                    try:
+                        if self.getNormalAngle(Ax, Ay, Bx, By) > math.pi / 3:
+                            distances.append((distance,  1.5, (Ax, Ay, Bx, By)))
+                        else:
+                            distances.append((distance,  1, (Ax, Ay, Bx, By)))
+                    except:
                         distances.append((distance,  1.5, (Ax, Ay, Bx, By)))
-                    else:
-                        distances.append((distance,  1, (Ax, Ay, Bx, By)))
-        try:
+        try:    
             minDistance = distances[0]
             for distance in distances:
                 if distance[0] < minDistance[0]:
@@ -266,7 +269,7 @@ class RealMotion:
         self.move_dps = -200
         self.R = 360
         self.theoreticalMotion = TheoreticalMotion(
-            0, 0, 0, 0, 0.1, 0.1, 0.01, 0.01, x, y)
+            0, 0, 0, 0, 0.1, 0.1, 0.01, 0.003, x, y)
 
         self.BP = brickpi3.BrickPi333()
         self.BP.offset_motor_encoder(
@@ -349,14 +352,18 @@ class RealMotion:
         self.turnDegrees(currentAngle - targetAngle)
 
     def findBottle(self, Ax, Ay, Bx, By):
-        self.scanArea(Ax, Ay, Bx, By)
-        self.unitMoveWithSenseStop()
-        self.backwardsUnitMove(0.5)
-        print("Position after bottle" + str(self.theoreticalMotion.pos))
+        found = self.scanArea(Ax, Ay, Bx, By)
+        if found:
+            self.unitMoveWithSenseStop()
+            self.backwardsUnitMove(0.7)
+            print("Position after bottle" + str(self.theoreticalMotion.pos))
+        else:
+            unitMove(0.5)
+            findBottle(Ax, Ay, Bx, By)
 
     # Assuming angle to (Ax, Ay) is > angle to (Bx, By)
     def scanArea(self, Ax, Ay, Bx, By):
-        deg = 10 * math.pi/180
+        deg = 15 * math.pi/180
         realMotion.lookTowards(Ax, Ay)
         targetAngle = self.theoreticalMotion.getRelativeAngle(Bx, By)
         print("aMean: ", self.theoreticalMotion.aMean,
@@ -384,9 +391,10 @@ class RealMotion:
                 angle = self.theoreticalMotion.aMean
                 distance = reading
                 self.theoreticalMotion.addObstacle(angle, distance)
-                return
+                return True
 
         print("ERROR: no bottle")
+        return False
 
     def localizedMove(self, x, y):
         while not self.nearby(x, y):
@@ -419,6 +427,8 @@ class RealMotion:
 
     def readTouch(self):
         read = False
+        value_touch_1 = 0
+        value_touch_2 = 0
         while not read:
             try:
                 value_touch_1 = self.BP.get_sensor(self.BP.PORT_3)
@@ -427,7 +437,7 @@ class RealMotion:
             except:
                 pass
         
-        return value_touch_1 == 1 or value_touch_2 == 1
+        return (value_touch_1 == 1 or value_touch_2 == 1)
 
     def unitMoveWithSenseStop(self):
         duration = 1.65 # 1.65seconds for 20cm
@@ -436,7 +446,8 @@ class RealMotion:
         self.BP.set_motor_dps(self.BP.PORT_B, self.move_dps)
 
         start = time.time()
-        while time.time() - start < duration and not self.readTouch():
+        while not self.readTouch():
+            time.sleep(0.2)
             pass
         actual_time = time.time() - start
 
