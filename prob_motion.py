@@ -163,7 +163,7 @@ class TheoreticalMotion:
 
     def drawParticles(self, x, y, a, reading):
         self.updateParticles(x, y, a, reading)
-        # self.canvas.drawParticles(self.points)
+        self.canvas.drawParticles(self.points)
 
     def updateParticles(self, x, y, a, reading):
         newpoints = self.points[:]
@@ -333,7 +333,7 @@ class RealMotion:
         reading = []
         estimatedReading = self.theoreticalMotion.getClosestDistance(self.theoreticalMotion.xMean, self.theoreticalMotion.yMean, self.theoreticalMotion.aMean)[0]
         bad = False
-        while len(reading) < 5:
+        while len(reading) < 2:
             try:
                 tryread = self.BP.get_sensor(self.BP.PORT_2)
                 if tryread != 255:
@@ -342,20 +342,22 @@ class RealMotion:
                 else:
                     time.sleep(0.2)
                     if not bad :
-                        print("I got many 255")
+                        print("I am getting 255s")
                         bad = True
             except:
                 time.sleep(0.2)
-                print("I got bad sensor readdings")
-                # TODO: THINK ABOUT IF THIS IS OKAY (ASSUME ESTIMATE READING)
-                reading.append(estimatedReading)
+                if not bad:
+                    print("I am getting bad sensor readdings")
+                    bad = True
+                # # TODO: THINK ABOUT IF THIS IS OKAY (ASSUME ESTIMATE READING)
+                # reading.append(estimatedReading)
         mean = sum(reading) / len(reading)
         print(reading)
         print("I sensed: ", mean)
         return mean
 
     def nearby(self, x, y):
-        return abs(self.theoreticalMotion.xMean - x) < 4.5 and abs(self.theoreticalMotion.yMean - y) < 4.5
+        return abs(self.theoreticalMotion.xMean - x) < 2 and abs(self.theoreticalMotion.yMean - y) < 2 
 
     def lookTowards(self, x, y):
         currentAngle = self.theoreticalMotion.aMean
@@ -378,7 +380,7 @@ class RealMotion:
 
     # Assuming angle to (Ax, Ay) is > angle to (Bx, By)
     def scanArea(self, Ax, Ay, Bx, By):
-        deg = 15 * math.pi/180
+        deg = 12 * math.pi/180
         realMotion.lookTowards(Ax, Ay)
         targetAngle = self.theoreticalMotion.getRelativeAngle(Bx, By)
         print("aMean: ", self.theoreticalMotion.aMean,
@@ -417,6 +419,7 @@ class RealMotion:
         while not self.nearby(x, y):
             distance = self.theoreticalMotion.getDistance(x, y)
             self.lookTowards(x, y)
+            print("distance:", distance)
 
             print("I think I am at: ",
                   (self.theoreticalMotion.xMean, self.theoreticalMotion.yMean))
@@ -513,7 +516,7 @@ realMotion.localizedMove(104, 30)
 realMotion.findBottle(168, 0, 168, 84)
 
 # Bottle 2
-realMotion.localizedMove(126, 57)
+realMotion.localizedMove(116, 87)
 realMotion.findBottle(84, 126, 168, 84)
 
 # Bottle 3
