@@ -166,7 +166,7 @@ class TheoreticalMotion:
         self.canvas.drawParticles(self.points)
 
     def updateParticles(self, x, y, a, reading):
-        newpoints = self.points[:]
+        newpoints = self.points
         if a != 0:
             for point in newpoints:
                 point.setPos((point.getPos()[0],
@@ -278,6 +278,8 @@ class RealMotion:
             self.BP.PORT_B, self.BP.get_motor_encoder(self.BP.PORT_B))
         self.BP.set_sensor_type(self.BP.PORT_3, self.BP.SENSOR_TYPE.TOUCH)
         self.BP.set_sensor_type(self.BP.PORT_4, self.BP.SENSOR_TYPE.TOUCH)
+        self.BP.set_sensor_type(
+            self.BP.PORT_1, self.BP.SENSOR_TYPE.NXT_ULTRASONIC)
 
         self.BP.set_motor_limits(self.BP.PORT_A, 30, 0.5 * self.R)
         self.BP.set_motor_limits(self.BP.PORT_B, 30, 0.5 * self.R)
@@ -290,6 +292,8 @@ class RealMotion:
             self.BP.PORT_B, self.BP.get_motor_encoder(self.BP.PORT_B))
         self.BP.set_sensor_type(self.BP.PORT_3, self.BP.SENSOR_TYPE.TOUCH)
         self.BP.set_sensor_type(self.BP.PORT_4, self.BP.SENSOR_TYPE.TOUCH)
+        self.BP.set_sensor_type(
+            self.BP.PORT_1, self.BP.SENSOR_TYPE.NXT_ULTRASONIC)
 
         self.BP.set_motor_limits(self.BP.PORT_A, 30, 0.5 * self.R)
         self.BP.set_motor_limits(self.BP.PORT_B, 30, 0.5 * self.R)
@@ -328,14 +332,14 @@ class RealMotion:
             self.theoreticalMotion.moveAndUpdate(0, 0, -angle, reading)
 
     def getReading(self):
-        self.BP.set_sensor_type(
-            self.BP.PORT_2, self.BP.SENSOR_TYPE.NXT_ULTRASONIC)
+        self.BP.reset_all()
+        self.reset()
         reading = []
         estimatedReading = self.theoreticalMotion.getClosestDistance(self.theoreticalMotion.xMean, self.theoreticalMotion.yMean, self.theoreticalMotion.aMean)[0]
         bad = False
-        while len(reading) < 2:
+        while len(reading) < 5:
             try:
-                tryread = self.BP.get_sensor(self.BP.PORT_2)
+                tryread = self.BP.get_sensor(self.BP.PORT_1)
                 if tryread != 255:
                     reading.append(tryread)
                     bad = False
@@ -380,7 +384,7 @@ class RealMotion:
 
     # Assuming angle to (Ax, Ay) is > angle to (Bx, By)
     def scanArea(self, Ax, Ay, Bx, By):
-        deg = 12 * math.pi/180
+        deg = 15 * math.pi/180
         realMotion.lookTowards(Ax, Ay)
         targetAngle = self.theoreticalMotion.getRelativeAngle(Bx, By)
         print("aMean: ", self.theoreticalMotion.aMean,
@@ -392,6 +396,8 @@ class RealMotion:
             toTurn = (2 * math.pi) - self.theoreticalMotion.aMean + targetAngle
             deg = -deg
 
+        print("toTurn:", toTurn)
+
         while toTurn > 0:
             print("toTurn: ", toTurn)
             realMotion.turnDegrees(deg)
@@ -402,13 +408,12 @@ class RealMotion:
             
             print("reading: ", reading, "check less than: ",expectedReading[0] - 20 * expectedReading[1])
             if reading < expectedReading[0] - 20 * expectedReading[1]:
-                # normalize turn after found
                 self.turnDegrees( (65/reading) * deg)
-                
                 # add wall
                 angle = self.theoreticalMotion.aMean
                 distance = reading
                 self.theoreticalMotion.addObstacle(angle, distance)
+                # normalize turn after found
                 return True
 
         print("ERROR: no bottle")
