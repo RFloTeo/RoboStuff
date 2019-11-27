@@ -104,7 +104,7 @@ class TheoreticalMotion:
         self.map.draw()
 
     def addObstacle(self, angle, distance):
-        print("currnet angle before drawing wall: ", (angle / math.pi) * 180)
+        print("current angle before drawing wall: ", (angle / math.pi) * 180)
         s = math.sin(angle)
         c = math.cos(angle)
         centerX = (self.xMean + distance * c) + 5
@@ -293,6 +293,10 @@ class RealMotion:
 
     def turnDegreesPosition(self, angle):
         oneDegree = 70 / 45 # Rotation needed per wheel to move one degree, in degrees
+        if abs(angle) <= (15 * math.pi / 180):
+            # We use a particular conversion for small angles
+            oneDegree = 91 / 45
+            
         if angle > math.pi:
             angle -= (math.pi * 2)
 
@@ -302,8 +306,8 @@ class RealMotion:
         angleInDeg = angle * (180 / math.pi)
         toTurn = oneDegree * angleInDeg
         self.reset()
-        self.BP.set_motor_position(self.BP.PORT_A, toTurn)
-        self.BP.set_motor_position(self.BP.PORT_B, -toTurn)
+        self.BP.set_motor_position(self.BP.PORT_A, -toTurn)
+        self.BP.set_motor_position(self.BP.PORT_B, toTurn)
         time.sleep(abs(angle * 2))   # Time our rotation late
         
         self.BP.reset_all()
@@ -332,7 +336,6 @@ class RealMotion:
         self.theoreticalMotion.moveAndUpdate(0, 0, -angle, reading)
 
     def getReading(self):
-        return 200
         self.reset()
         reading = []
         bad = False
@@ -382,8 +385,8 @@ class RealMotion:
     # Assuming angle to (Ax, Ay) is > angle to (Bx, By)
     def scanArea(self, Ax, Ay, Bx, By):
         deg = 10 * math.pi/180
-        self.lookTowards(Ax, Ay)
         original_angle = self.theoreticalMotion.aMean
+        self.lookTowards(Ax, Ay)
         targetAngle = self.theoreticalMotion.getRelativeAngle(Bx, By)
         print("aMean: ", self.theoreticalMotion.aMean,
               "target angle: ", targetAngle)
@@ -394,17 +397,26 @@ class RealMotion:
             toTurn = (2 * math.pi) - self.theoreticalMotion.aMean + targetAngle
             deg = -deg
         
+        acc = 0
         while toTurn > 0:
             print("toTurn: ", toTurn)
-            self.turnDegrees(deg)
+            #self.turnDegrees(deg)
+            self.turnDegreesPosition(deg)
             toTurn -= abs(deg)
             reading = self.getReading()
             expectedReading = self.theoreticalMotion.getClosestDistance(
                 self.theoreticalMotion.xMean, self.theoreticalMotion.yMean, self.theoreticalMotion.aMean)
+            acc += 1
 
             print("reading: ", reading, "check less than: ",
                   expectedReading[0] - 15 * expectedReading[1], "error", expectedReading[1])
             if reading < expectedReading[0] - 15 * expectedReading[1]:
+                # We do one final rotation, since the sensor detects the obstacle in it's peripherals
+                # If the obstacle is further away, we turn less. If it's closer, we turn more.
+                multiplier = 70 / expectedReading[0]
+                print(str(multiplier))
+                self.turnDegreesPosition(15 * (math.pi / 180) * multiplier)
+                print("Final ROt:" + str(15 * (math.pi / 180) * multiplier))
                 # add wall
                 angle = self.theoreticalMotion.aMean
                 self.theoreticalMotion.addObstacle(angle, reading)
@@ -414,8 +426,10 @@ class RealMotion:
         current_angle = self.theoreticalMotion.aMean
         print("original angle: ", original_angle,
                   "current angle: ", current_angle)
-        self.turnDegrees(current_angle - original_angle)
-
+        while (acc  > 0):
+            self.turnDegreesPosition(-1 * deg)
+            acc -= 2
+        #self.turnDegreesPosition(current_angle - original_angle)
         return False
 
     def moveDistance(self, x, y):
@@ -513,23 +527,16 @@ class RealMotion:
 
 
 realMotion = RealMotion(84, 30)
-realMotion.turnDegreesPosition(30 * math.pi / 180)
-realMotion.turnDegreesPosition(30 * math.pi / 180)
-realMotion.turnDegreesPosition(30 * math.pi / 180)
+# Bottle 1
+realMotion.moveDistance(104, 30)
+realMotion.findBottle(168, 0, 168, 84)
 
+# Bottle 2
+realMotion.moveDistance(115, 90)
+realMotion.moveDistance(115, 110)
+realMotion.findBottle(84, 126, 168, 126)
 
-
-
-# # Bottle 1
-# realMotion.moveDistance(104, 30)
-# realMotion.findBottle(168, 0, 168, 84)
-
-# # Bottle 2
-# realMotion.moveDistance(115, 90)
-# realMotion.moveDistance(115, 110)
-# realMotion.findBottle(84, 126, 168, 126)
-
-# # Bottle 3
-# realMotion.moveDistance(100, 50)
-# realMotion.moveDistance(50, 50)
-# realMotion.findBottle(0, 30, 80, 130)
+# Bottle 3
+realMotion.moveDistance(100, 50)
+realMotion.moveDistance(50, 50)
+realMotion.findBottle(0, 30, 80, 130)
