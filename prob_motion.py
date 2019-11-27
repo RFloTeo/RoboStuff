@@ -276,6 +276,7 @@ class RealMotion:
             0, 0, 0, 0, 0.1, 0.1, 0.01, 0.002, x, y)
 
         self.BP = brickpi3.BrickPi333()
+        self.BP.reset_all()
         self.reset()
 
     def reset(self):
@@ -292,8 +293,10 @@ class RealMotion:
         self.BP.set_motor_limits(self.BP.PORT_B, 30, 0.5 * self.R)
 
     def turnDegreesPosition(self, angle):
+        self.BP.reset_all()
+        self.reset()
         oneDegree = 70 / 45 # Rotation needed per wheel to move one degree, in degrees
-        if abs(angle) <= (15 * math.pi / 180):
+        if abs(angle) <= (20 * math.pi / 180):
             # We use a particular conversion for small angles
             oneDegree = 91 / 45
             
@@ -305,10 +308,9 @@ class RealMotion:
 
         angleInDeg = angle * (180 / math.pi)
         toTurn = oneDegree * angleInDeg
-        self.reset()
         self.BP.set_motor_position(self.BP.PORT_A, -toTurn)
         self.BP.set_motor_position(self.BP.PORT_B, toTurn)
-        time.sleep(abs(angle * 2))   # Time our rotation late
+        time.sleep(0.5)   # Time our rotation late
         
         self.BP.reset_all()
         reading = self.getReading()
@@ -372,6 +374,7 @@ class RealMotion:
         found = self.scanArea(Ax, Ay, Bx, By)
         if found:
             dist = self.unitMoveWithSenseStop()
+            self.BP.reset_all()
             self.backwardsUnitMove(1)
 
             reading = self.getReading()
@@ -384,7 +387,7 @@ class RealMotion:
 
     # Assuming angle to (Ax, Ay) is > angle to (Bx, By)
     def scanArea(self, Ax, Ay, Bx, By):
-        deg = 10 * math.pi/180
+        deg = 20 * math.pi/180
         original_angle = self.theoreticalMotion.aMean
         self.lookTowards(Ax, Ay)
         targetAngle = self.theoreticalMotion.getRelativeAngle(Bx, By)
@@ -400,7 +403,6 @@ class RealMotion:
         acc = 0
         while toTurn > 0:
             print("toTurn: ", toTurn)
-            #self.turnDegrees(deg)
             self.turnDegreesPosition(deg)
             toTurn -= abs(deg)
             reading = self.getReading()
@@ -409,14 +411,12 @@ class RealMotion:
             acc += 1
 
             print("reading: ", reading, "check less than: ",
-                  expectedReading[0] - 15 * expectedReading[1], "error", expectedReading[1])
-            if reading < expectedReading[0] - 15 * expectedReading[1]:
-                # We do one final rotation, since the sensor detects the obstacle in it's peripherals
-                # If the obstacle is further away, we turn less. If it's closer, we turn more.
+                  expectedReading[0] - 20 * expectedReading[1], "error", expectedReading[1])
+            if reading < expectedReading[0] - 20 * expectedReading[1]:
                 multiplier = 70 / expectedReading[0]
                 print(str(multiplier))
-                self.turnDegreesPosition(15 * (math.pi / 180) * multiplier)
-                print("Final ROt:" + str(15 * (math.pi / 180) * multiplier))
+                self.turnDegreesPosition(deg * multiplier)
+                print("Final Rot:" + str(deg * multiplier))
                 # add wall
                 angle = self.theoreticalMotion.aMean
                 self.theoreticalMotion.addObstacle(angle, reading)
@@ -518,6 +518,7 @@ class RealMotion:
         duration = 1.65 * frac
         self.BP.reset_all()
         self.reset()
+        
         self.BP.set_motor_dps(self.BP.PORT_A, -self.move_dps)
         self.BP.set_motor_dps(self.BP.PORT_B, -self.move_dps)
 
@@ -528,7 +529,7 @@ class RealMotion:
 
 realMotion = RealMotion(84, 30)
 # Bottle 1
-realMotion.moveDistance(104, 30)
+realMotion.moveDistance(114, 30)
 realMotion.findBottle(168, 0, 168, 84)
 
 # Bottle 2
