@@ -291,6 +291,25 @@ class RealMotion:
         self.BP.set_motor_limits(self.BP.PORT_A, 30, 0.5 * self.R)
         self.BP.set_motor_limits(self.BP.PORT_B, 30, 0.5 * self.R)
 
+    def turnDegreesPosition(self, angle):
+        oneDegree = 70 / 45 # Rotation needed per wheel to move one degree, in degrees
+        if angle > math.pi:
+            angle -= (math.pi * 2)
+
+        if angle < -math.pi:
+            angle += (math.pi * 2)
+
+        angleInDeg = angle * (180 / math.pi)
+        toTurn = oneDegree * angleInDeg
+        self.reset()
+        self.BP.set_motor_position(self.BP.PORT_A, toTurn)
+        self.BP.set_motor_position(self.BP.PORT_B, -toTurn)
+        time.sleep(abs(angle * 2))   # Time our rotation late
+        
+        self.BP.reset_all()
+        reading = self.getReading()
+        self.theoreticalMotion.moveAndUpdate(0, 0, -angle, reading)
+    
     def turnDegrees(self, angle):
         if angle > math.pi:
             angle -= (math.pi * 2)
@@ -299,13 +318,11 @@ class RealMotion:
             angle += (math.pi * 2)
 
         duration = (1.38 * abs(angle) * 2) / math.pi
-
+        self.reset()
         if angle > 0:
-            self.reset()
             self.BP.set_motor_dps(self.BP.PORT_A, -self.turn_dps)
             self.BP.set_motor_dps(self.BP.PORT_B, self.turn_dps)
         else:
-            self.reset()
             self.BP.set_motor_dps(self.BP.PORT_A, self.turn_dps)
             self.BP.set_motor_dps(self.BP.PORT_B, -self.turn_dps)
 
@@ -315,6 +332,7 @@ class RealMotion:
         self.theoreticalMotion.moveAndUpdate(0, 0, -angle, reading)
 
     def getReading(self):
+        return 200
         self.reset()
         reading = []
         bad = False
@@ -348,7 +366,6 @@ class RealMotion:
         self.turnDegrees(currentAngle - targetAngle)
 
     def findBottle(self, Ax, Ay, Bx, By):
-        original_angle = self.theoreticalMotion.aMean
         found = self.scanArea(Ax, Ay, Bx, By)
         if found:
             dist = self.unitMoveWithSenseStop()
@@ -359,10 +376,6 @@ class RealMotion:
                 dist - 20, dist - 20, 0, reading)
             print("Position after bottle" + str(self.theoreticalMotion.pos))
         else:
-            current_angle = self.theoreticalMotion.aMean
-            print("original angle: ", original_angle,
-                  "current angle: ", current_angle)
-            self.turnDegrees(current_angle - original_angle)
             self.unitMove(1)
             self.findBottle(Ax, Ay, Bx, By)
 
@@ -370,6 +383,7 @@ class RealMotion:
     def scanArea(self, Ax, Ay, Bx, By):
         deg = 10 * math.pi/180
         self.lookTowards(Ax, Ay)
+        original_angle = self.theoreticalMotion.aMean
         targetAngle = self.theoreticalMotion.getRelativeAngle(Bx, By)
         print("aMean: ", self.theoreticalMotion.aMean,
               "target angle: ", targetAngle)
@@ -379,9 +393,7 @@ class RealMotion:
         else:
             toTurn = (2 * math.pi) - self.theoreticalMotion.aMean + targetAngle
             deg = -deg
-
-        print("toTurn:", toTurn)
-
+        
         while toTurn > 0:
             print("toTurn: ", toTurn)
             self.turnDegrees(deg)
@@ -393,14 +405,16 @@ class RealMotion:
             print("reading: ", reading, "check less than: ",
                   expectedReading[0] - 15 * expectedReading[1], "error", expectedReading[1])
             if reading < expectedReading[0] - 15 * expectedReading[1]:
-                # self.turnDegrees((65/reading) * deg)
                 # add wall
                 angle = self.theoreticalMotion.aMean
                 self.theoreticalMotion.addObstacle(angle, reading)
-                # normalize turn after found
                 return True
 
-        print("ERROR: no bottle")
+        print("ERROR: no bottle" )
+        current_angle = self.theoreticalMotion.aMean
+        print("original angle: ", original_angle,
+                  "current angle: ", current_angle)
+        self.turnDegrees(current_angle - original_angle)
 
         return False
 
@@ -499,17 +513,23 @@ class RealMotion:
 
 
 realMotion = RealMotion(84, 30)
+realMotion.turnDegreesPosition(30 * math.pi / 180)
+realMotion.turnDegreesPosition(30 * math.pi / 180)
+realMotion.turnDegreesPosition(30 * math.pi / 180)
 
-# Bottle 1
-realMotion.moveDistance(104, 30)
-realMotion.findBottle(168, 0, 168, 84)
 
-# Bottle 2
-realMotion.moveDistance(115, 90)
-realMotion.moveDistance(115, 110)
-realMotion.findBottle(84, 126, 168, 126)
 
-# Bottle 3
-realMotion.moveDistance(100, 50)
-realMotion.moveDistance(50, 50)
-realMotion.findBottle(0, 30, 80, 130)
+
+# # Bottle 1
+# realMotion.moveDistance(104, 30)
+# realMotion.findBottle(168, 0, 168, 84)
+
+# # Bottle 2
+# realMotion.moveDistance(115, 90)
+# realMotion.moveDistance(115, 110)
+# realMotion.findBottle(84, 126, 168, 126)
+
+# # Bottle 3
+# realMotion.moveDistance(100, 50)
+# realMotion.moveDistance(50, 50)
+# realMotion.findBottle(0, 30, 80, 130)
