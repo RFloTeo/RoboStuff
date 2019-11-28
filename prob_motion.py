@@ -115,6 +115,7 @@ class TheoreticalMotion:
         By = centerY - c * 8
         self.map.add_wall((Ax, Ay, Bx, By))
         self.map.draw()
+        return (centerX, centerY)
 
     def getClosestDistance(self, x, y, a):
         walls = self.map.get_walls()
@@ -274,12 +275,12 @@ class RealMotion:
         self.R = 360
         self.theoreticalMotion = TheoreticalMotion(
             0, 0, 0, 0, 0.1, 0.1, 0.01, 0.002, x, y)
-
         self.BP = brickpi3.BrickPi333()
         self.BP.reset_all()
         self.reset()
 
     def reset(self):
+        self.BP = brickpi3.BrickPi333()
         self.BP.offset_motor_encoder(
             self.BP.PORT_A, self.BP.get_motor_encoder(self.BP.PORT_A))
         self.BP.offset_motor_encoder(
@@ -293,13 +294,13 @@ class RealMotion:
         self.BP.set_motor_limits(self.BP.PORT_B, 30, 0.5 * self.R)
 
     def turnDegreesPosition(self, angle):
-        self.BP.reset_all()
-        self.reset()
-        oneDegree = 70 / 45 # Rotation needed per wheel to move one degree, in degrees
-        if abs(angle) <= (20 * math.pi / 180):
+        # self.BP.reset_all()
+        # self.reset()
+        oneDegree = 70 / 45  # Rotation needed per wheel to move one degree, in degrees
+        if abs(angle) <= (15 * math.pi / 180):
             # We use a particular conversion for small angles
             oneDegree = 91 / 45
-            
+
         if angle > math.pi:
             angle -= (math.pi * 2)
 
@@ -311,11 +312,11 @@ class RealMotion:
         self.BP.set_motor_position(self.BP.PORT_A, -toTurn)
         self.BP.set_motor_position(self.BP.PORT_B, toTurn)
         time.sleep(0.5)   # Time our rotation late
-        
-        self.BP.reset_all()
+
+        self.stop()
         reading = self.getReading()
         self.theoreticalMotion.moveAndUpdate(0, 0, -angle, reading)
-    
+
     def turnDegrees(self, angle):
         if angle > math.pi:
             angle -= (math.pi * 2)
@@ -324,7 +325,9 @@ class RealMotion:
             angle += (math.pi * 2)
 
         duration = (1.38 * abs(angle) * 2) / math.pi
-        self.reset()
+
+        # self.BP.reset_all()
+        # self.reset()
         if angle > 0:
             self.BP.set_motor_dps(self.BP.PORT_A, -self.turn_dps)
             self.BP.set_motor_dps(self.BP.PORT_B, self.turn_dps)
@@ -333,12 +336,15 @@ class RealMotion:
             self.BP.set_motor_dps(self.BP.PORT_B, -self.turn_dps)
 
         time.sleep(duration)
-        self.BP.reset_all()
+        # self.BP.reset_all()
+        # self.reset()
+        self.stop()
+
         reading = self.getReading()
         self.theoreticalMotion.moveAndUpdate(0, 0, -angle, reading)
 
     def getReading(self):
-        self.reset()
+        # self.reset()
         reading = []
         bad = False
         while len(reading) < 5:
@@ -368,41 +374,98 @@ class RealMotion:
     def lookTowards(self, x, y):
         currentAngle = self.theoreticalMotion.aMean
         targetAngle = self.theoreticalMotion.getRelativeAngle(x, y)
+        print("Looking from ", currentAngle, "to", targetAngle)
         self.turnDegrees(currentAngle - targetAngle)
 
     def findBottle(self, Ax, Ay, Bx, By):
-        found = self.scanArea(Ax, Ay, Bx, By)
-        if found:
-            dist = self.unitMoveWithSenseStop()
-            self.BP.reset_all()
-            self.backwardsUnitMove(1)
+        # reading = self.getReading()
+        # expectedReading = self.theoreticalMotion.getClosestDistance(
+        #     self.theoreticalMotion.xMean, self.theoreticalMotion.yMean, self.theoreticalMotion.aMean)
 
-            reading = self.getReading()
-            self.theoreticalMotion.moveAndUpdate(
-                dist - 20, dist - 20, 0, reading)
-            print("Position after bottle" + str(self.theoreticalMotion.pos))
+        # print("reading: ", reading, "check less than: ",
+        #       expectedReading[0] - 20 * expectedReading[1], "error", expectedReading[1])
+        # if reading < expectedReading[0] - 20 * expectedReading[1]:
+            # print("Found Bottle Fast")
+
+            # angle = self.theoreticalMotion.aMean
+            # self.theoreticalMotion.addObstacle(angle, reading)
+
+            # dist = self.unitMoveWithSenseStop()
+            # print("I moved", dist)
+            # # self.BP.reset_all()
+            # # self.reset()
+            # # self.backwardsUnitMove(1)
+            # # MOVE BACK!
+            # duration = 1.65 * (dist / 20)
+            # print("Going back for ", duration, " seconds")
+
+            # self.BP.set_motor_dps(self.BP.PORT_A, -self.move_dps)
+            # self.BP.set_motor_dps(self.BP.PORT_B, -self.move_dps)
+
+            # time.sleep(duration)
+
+            # # self.BP.reset_all()
+            # # self.reset()
+            # self.stop()
+
+            # print("Position after bottle" + str(self.theoreticalMotion.pos))
+        # else:
+        print("Scanning...")
+        scan = self.scanArea(Ax, Ay, Bx, By)
+        found = scan[0]
+        obs = scan[1]
+        if found:
+
+            dist = self.unitMoveWithSenseStop()
+            print("I moved", dist)
+            # self.BP.reset_all()
+            # self.reset()
+            # self.backwardsUnitMove(1)
+            # MOVE BACK!
+            duration = 1.65 * (dist / 20)
+            print("Going back for ", duration, " seconds")
+
+            self.BP.set_motor_dps(self.BP.PORT_A, -self.move_dps)
+            self.BP.set_motor_dps(self.BP.PORT_B, -self.move_dps)
+
+            time.sleep(duration)
+
+            # self.BP.reset_all()
+            # self.reset()
+            self.stop()
+            self.lookTowards(obs[0], obs[1])
+            print("Position after bottle" +
+                  str(self.theoreticalMotion.pos))
         else:
+            print("Trying Again")
             self.unitMove(1)
             self.findBottle(Ax, Ay, Bx, By)
 
+    def stop(self):
+        # self.BP.set_motor_power(self.BP.PORT_A + self.BP.PORT_B +
+        #                         self.BP.PORT_C + self.BP.PORT_D, self.BP.MOTOR_FLOAT)
+        self.BP.reset_all()
+        self.reset()
+
     # Assuming angle to (Ax, Ay) is > angle to (Bx, By)
     def scanArea(self, Ax, Ay, Bx, By):
-        deg = 20 * math.pi/180
+        deg = 15 * math.pi/180
         original_angle = self.theoreticalMotion.aMean
+
         self.lookTowards(Ax, Ay)
         targetAngle = self.theoreticalMotion.getRelativeAngle(Bx, By)
-        print("aMean: ", self.theoreticalMotion.aMean,
-              "target angle: ", targetAngle)
+        print("Scanning area with current angle: ", self.theoreticalMotion.aMean,
+              " target angle: ", targetAngle)
         toTurn = 0
         if self.theoreticalMotion.aMean < math.pi:
             toTurn = self.theoreticalMotion.aMean - targetAngle
         else:
             toTurn = (2 * math.pi) - self.theoreticalMotion.aMean + targetAngle
             deg = -deg
-        
+
         acc = 0
         while toTurn > 0:
-            print("toTurn: ", toTurn)
+            # print("toTurn: ", toTurn)
             self.turnDegreesPosition(deg)
             toTurn -= abs(deg)
             reading = self.getReading()
@@ -414,42 +477,47 @@ class RealMotion:
                   expectedReading[0] - 20 * expectedReading[1], "error", expectedReading[1])
             if reading < expectedReading[0] - 20 * expectedReading[1]:
                 multiplier = 70 / expectedReading[0]
-                print(str(multiplier))
+                # print(str(multiplier))
                 self.turnDegreesPosition(deg * multiplier)
-                print("Final Rot:" + str(deg * multiplier))
+                # print("Final Rot:" + str(deg * multiplier))
                 # add wall
                 angle = self.theoreticalMotion.aMean
-                self.theoreticalMotion.addObstacle(angle, reading)
-                return True
+                obs = self.theoreticalMotion.addObstacle(angle, reading)
+                return (True, obs)
 
-        print("ERROR: no bottle" )
+        print("ERROR: no bottle")
         current_angle = self.theoreticalMotion.aMean
         print("original angle: ", original_angle,
-                  "current angle: ", current_angle)
-        while (acc  > 0):
+              "current angle: ", current_angle)
+        while (acc > 0):
             self.turnDegreesPosition(-1 * deg)
             acc -= 2
-        #self.turnDegreesPosition(current_angle - original_angle)
+        # self.turnDegreesPosition(current_angle - original_angle)
         return False
 
     def moveDistance(self, x, y):
         distance = self.theoreticalMotion.getDistance(x, y)
+
+        # self.BP.reset_all()
+        # self.reset()
+
         self.lookTowards(x, y)
-        print("distance:", distance)
+        print("distance to target: ", distance)
 
         print("I think I am at: ",
               (self.theoreticalMotion.xMean, self.theoreticalMotion.yMean))
         print("I plan to go to: ", (x, y))
         duration = 1.65 * (distance / 20)
 
-        self.reset()
+        # self.reset()
         self.BP.set_motor_dps(self.BP.PORT_A, self.move_dps)
         self.BP.set_motor_dps(self.BP.PORT_B, self.move_dps)
 
         time.sleep(duration)
 
-        self.BP.reset_all()
-        self.reset()
+        # self.BP.reset_all()
+        # self.reset()
+        self.stop()
 
         reading = self.getReading()
         self.theoreticalMotion.moveAndUpdate(distance, distance, 0, reading)
@@ -458,7 +526,7 @@ class RealMotion:
         while not self.nearby(x, y):
             distance = self.theoreticalMotion.getDistance(x, y)
             self.lookTowards(x, y)
-            print("distance:", distance)
+            print("distance to targfet ", distance)
 
             print("I think I am at: ",
                   (self.theoreticalMotion.xMean, self.theoreticalMotion.yMean))
@@ -472,14 +540,15 @@ class RealMotion:
 
     def unitMove(self, frac):
         duration = 1.65 * frac
-        self.reset()
+        # self.reset()
         self.BP.set_motor_dps(self.BP.PORT_A, self.move_dps)
         self.BP.set_motor_dps(self.BP.PORT_B, self.move_dps)
 
         time.sleep(duration)
 
-        self.BP.reset_all()
-        self.reset()
+        # self.BP.reset_all()
+        # self.reset()
+        self.stop()
 
         reading = self.getReading()
         self.theoreticalMotion.moveAndUpdate(20 * frac, 20 * frac, 0, reading)
@@ -500,7 +569,7 @@ class RealMotion:
 
     def unitMoveWithSenseStop(self):
         duration = 1.65  # 1.65seconds for 20cm
-        self.reset()
+        # self.reset()
         self.BP.set_motor_dps(self.BP.PORT_A, self.move_dps)
         self.BP.set_motor_dps(self.BP.PORT_B, self.move_dps)
 
@@ -510,34 +579,40 @@ class RealMotion:
             pass
         actual_time = time.time() - start
 
-        self.BP.reset_all()
+        # self.BP.reset_all()
+        # self.reset()
+        self.stop()
+
         actual_duration = actual_time / duration
         return actual_duration * 20
 
     def backwardsUnitMove(self, frac):
         duration = 1.65 * frac
-        self.BP.reset_all()
-        self.reset()
-        
+        # self.BP.reset_all()
+        # self.reset()
+
         self.BP.set_motor_dps(self.BP.PORT_A, -self.move_dps)
         self.BP.set_motor_dps(self.BP.PORT_B, -self.move_dps)
 
         time.sleep(duration)
 
-        self.BP.reset_all()
+        # self.BP.reset_all()
+        # self.reset()
+        self.stop()
 
 
 realMotion = RealMotion(84, 30)
 # Bottle 1
-realMotion.moveDistance(114, 30)
-realMotion.findBottle(168, 0, 168, 84)
+realMotion.moveDistance(110, 30)
+realMotion.findBottle(210, 10, 168, 84)
 
 # Bottle 2
-realMotion.moveDistance(115, 90)
-realMotion.moveDistance(115, 110)
-realMotion.findBottle(84, 126, 168, 126)
+realMotion.moveDistance(130, 100)
+realMotion.findBottle(84, 145, 168, 126)
 
 # Bottle 3
-realMotion.moveDistance(100, 50)
-realMotion.moveDistance(50, 50)
-realMotion.findBottle(0, 30, 80, 130)
+realMotion.moveDistance(84, 90)
+# realMotion.moveDistance(50, 70)
+realMotion.findBottle(0, 93, 80, 130)
+
+realMotion.moveDistance(84, 30)
